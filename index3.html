@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scroll Sequence Shrink + GIF Transition</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: black;
+      overflow-x: hidden;
+      font-family: sans-serif;
+    }
+
+    section {
+      height: 500vh;
+      position: relative;
+      background: black;
+    }
+
+    .sticky-wrapper {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: black;
+      z-index: 2;
+      overflow: visible; /* FIX: allow overflow */
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
+      transition: transform 1s ease, width 1s ease, height 1s ease;
+    }
+
+    .gif-loop {
+      position: absolute;
+      right: 5%;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 50%;
+      opacity: 0;
+      transition: opacity 1s ease;
+      z-index: 1;
+    }
+
+    .hero-text {
+      position: absolute;
+      left: 10%;
+      top: 50%;
+      transform: translateY(-50%);
+      color: white;
+      opacity: 0;
+      z-index: 3;
+      text-align: left;
+    }
+
+    .hero-text h1 {
+      font-size: 4vw;
+      margin: 0;
+    }
+
+    @media (max-width: 768px) {
+      .gif-loop {
+        top: auto;
+        bottom: 5%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+      }
+
+      .hero-text {
+        left: 50%;
+        top: 15%;
+        transform: translateX(-50%);
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <section>
+    <div class="sticky-wrapper">
+      <canvas id="sequence"></canvas>
+      <img src="mack-book-mockup-animation-with-framer-tutorial.gif" class="gif-loop" id="heroGif" alt="Loop Animation" />
+      <div class="hero-text" id="heroText">
+        <h1>Welcome to the Future</h1>
+        <p>Experience innovation like never before.</p>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    gsap.registerPlugin(ScrollTrigger);
+
+    const frameCount = 76;
+    const images = [];
+    const canvas = document.getElementById("sequence");
+    const context = canvas.getContext("2d");
+
+    const heroGif = document.getElementById("heroGif");
+    const heroText = document.getElementById("heroText");
+
+    let frameIndex = 0;
+    let loaded = 0;
+    let ready = false;
+
+    const currentFrame = i => `/images/${i}.webp`;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      if (ready) drawImageScaled(images[frameIndex]);
+    }
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    for (let i = 1; i <= frameCount; i++) {
+      const img = new Image();
+      img.src = currentFrame(i);
+      img.onload = () => {
+        img.decode().then(() => {
+          loaded++;
+          if (loaded === frameCount) {
+            ready = true;
+            initScrollSequence();
+          }
+        });
+      };
+      images.push(img);
+    }
+
+    function drawImageScaled(img) {
+      const canvasRatio = canvas.width / canvas.height;
+      const imgRatio = img.width / img.height;
+      let w, h, x, y;
+
+      if (imgRatio > canvasRatio) {
+        h = canvas.height;
+        w = img.width * (h / img.height);
+        x = (canvas.width - w) / 2;
+        y = 0;
+      } else {
+        w = canvas.width;
+        h = img.height * (w / img.width);
+        x = 0;
+        y = (canvas.height - h) / 2;
+      }
+
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(img, x, y, w, h);
+    }
+
+    function initScrollSequence() {
+      drawImageScaled(images[0]);
+
+      const shrinkFrame = 70;
+      let shrinkStarted = false;
+      let shrinkDone = false;
+
+      ScrollTrigger.create({
+        trigger: "section",
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 1,
+        pin: ".sticky-wrapper",
+        anticipatePin: 1,
+        onUpdate: (self) => {
+          const newFrame = Math.min(
+            frameCount - 1,
+            Math.floor(self.progress * (frameCount - 1))
+          );
+
+          if (newFrame !== frameIndex) {
+            frameIndex = newFrame;
+            requestAnimationFrame(() => drawImageScaled(images[frameIndex]));
+          }
+
+          if (frameIndex >= shrinkFrame && !shrinkStarted) {
+            shrinkStarted = true;
+            const isMobile = window.innerWidth < 768;
+
+            if (isMobile) {
+              gsap.to(canvas, {
+                duration: 1.2,
+                width: "80%",
+                height: "40%",
+                xPercent: -50,
+                yPercent: 50,
+                left: "50%",
+                bottom: "5%",
+                ease: "power2.out",
+                position: "absolute"
+              });
+            } else {
+              gsap.to(canvas, {
+                duration: 1.2,
+                width: "50%",
+                height: "50%",
+                xPercent: 50,
+                right: "5%",
+                ease: "power2.out",
+                position: "absolute"
+              });
+            }
+
+            gsap.to(heroText, { opacity: 1, duration: 1.5, delay: 0.3 });
+          }
+
+          if (self.progress > 0.95 && !shrinkDone) {
+            shrinkDone = true;
+            gsap.to(canvas, { opacity: 0, duration: 1 });
+            gsap.to(heroGif, { opacity: 1, duration: 1, delay: 0.5 });
+          }
+        },
+      });
+    }
+  </script>
+</body>
+</html>
