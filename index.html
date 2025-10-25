@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Apple Scroll Sequence Fixed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Scroll Sequence Sticky Fixed</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
   <style>
@@ -12,16 +12,21 @@
       padding: 0;
       background: black;
       overflow-x: hidden;
+    }
+
+    body {
       height: 100%;
+      font-family: sans-serif;
     }
 
-    /* Main scroll area */
+    /* The entire scroll area */
     section {
-      height: 300vh; /* controls scroll length */
+      height: 400vh; /* longer = slower animation */
       position: relative;
+      background: black;
     }
 
-    /* Pinned container for the canvas */
+    /* Canvas stays pinned in view */
     .sticky-wrapper {
       position: sticky;
       top: 0;
@@ -30,8 +35,9 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      overflow: hidden;
       background: black;
+      overflow: hidden; /* keep clean edges */
+      z-index: 1;
     }
 
     canvas {
@@ -51,94 +57,91 @@
   </section>
 
   <script>
-  gsap.registerPlugin(ScrollTrigger);
+    gsap.registerPlugin(ScrollTrigger);
 
-  const frameCount = 76;
-  const images = [];
-  const canvas = document.getElementById("sequence");
-  const context = canvas.getContext("2d");
+    const frameCount = 75;
+    const images = [];
+    const canvas = document.getElementById("sequence");
+    const context = canvas.getContext("2d");
 
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+    let frameIndex = 0;
+    let loaded = 0;
+    let ready = false;
 
-  const currentFrame = i =>
-    `/images/${i}.webp`; // Update path as needed
-
-  // --- Preload frames ---
-  let loaded = 0;
-  for (let i = 1; i <= frameCount; i++) {
-    const img = new Image();
-    img.src = currentFrame(i);
-    img.onload = () => {
-      loaded++;
-      if (loaded === frameCount) startAnimation();
-    };
-    images.push(img);
-  }
-
-  function drawImageScaled(img) {
-    const canvasRatio = canvas.width / canvas.height;
-    const imgRatio = img.width / img.height;
-    let w, h, x, y;
-
-    if (imgRatio > canvasRatio) {
-      h = canvas.height;
-      w = img.width * (h / img.height);
-      x = (canvas.width - w) / 2;
-      y = 0;
-    } else {
-      w = canvas.width;
-      h = img.height * (w / img.width);
-      x = 0;
-      y = (canvas.height - h) / 2;
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      if (ready) drawImageScaled(images[frameIndex]);
     }
 
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(img, x, y, w, h);
-  }
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
 
-  function startAnimation() {
-    const state = { frame: 0 };
-    let current = -1;
+    const currentFrame = i => `/img/${i}.webp`; // your image path
 
-    // Use GSAP ticker instead of ScrollTrigger's onUpdate for smoother sync
-    const tl = gsap.timeline({
-      scrollTrigger: {
-        trigger: "section",
-        start: "top top",
-        end: "bottom bottom",
-        scrub: 1,
-      },
-    });
+    // Load & decode all frames
+    for (let i = 1; i <= frameCount; i++) {
+      const img = new Image();
+      img.src = currentFrame(i);
+      img.onload = () => {
+        img.decode().then(() => {
+          loaded++;
+          if (loaded === frameCount) {
+            ready = true;
+            initScrollSequence();
+          }
+        });
+      };
+      images.push(img);
+    }
 
-    tl.to(state, {
-      frame: frameCount - 1,
-      ease: "none",
-      onUpdate: () => {
-        const frameIndex = Math.floor(state.frame);
-        if (frameIndex !== current && images[frameIndex]) {
-          current = frameIndex;
-          requestAnimationFrame(() => drawImageScaled(images[frameIndex]));
-        }
-      },
-    });
+    function drawImageScaled(img) {
+      const canvasRatio = canvas.width / canvas.height;
+      const imgRatio = img.width / img.height;
+      let w, h, x, y;
 
-    drawImageScaled(images[0]); // Initial frame
-  }
+      if (imgRatio > canvasRatio) {
+        h = canvas.height;
+        w = img.width * (h / img.height);
+        x = (canvas.width - w) / 2;
+        y = 0;
+      } else {
+        w = canvas.width;
+        h = img.height * (w / img.width);
+        x = 0;
+        y = (canvas.height - h) / 2;
+      }
 
-  window.addEventListener("resize", () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  });
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(img, x, y, w, h);
+    }
 
-  // Smooth Scroll (Lenis)
-  const lenis = new Lenis({ lerp: 0.1, smoothWheel: true });
-  function raf(time) {
-    lenis.raf(time);
-    requestAnimationFrame(raf);
-  }
-  requestAnimationFrame(raf);
-</script>
+    function initScrollSequence() {
+      drawImageScaled(images[0]);
+
+      // small delay avoids mobile layout jumps
+      setTimeout(() => {
+        ScrollTrigger.create({
+          trigger: "section",
+          start: "top top",
+          end: "bottom bottom",
+          scrub: 1,
+          pin: ".sticky-wrapper", // 👈 pin the canvas during scroll
+          anticipatePin: 1,
+          onUpdate: (self) => {
+            const newFrame = Math.min(
+              frameCount - 1,
+              Math.floor(self.progress * (frameCount - 1))
+            );
+            if (newFrame !== frameIndex) {
+              frameIndex = newFrame;
+              requestAnimationFrame(() => drawImageScaled(images[frameIndex]));
+            }
+          },
+        });
+      }, 150);
+    }
+  </script>
 
 </body>
 </html>
